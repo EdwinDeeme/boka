@@ -13,6 +13,7 @@ export type Product = {
   imageUrl?: string
   active: boolean
   extras?: { extra: Product }[]
+  inventory?: { inventoryItemId: number; quantityUsed: number }[]
 }
 
 export type CartItem = {

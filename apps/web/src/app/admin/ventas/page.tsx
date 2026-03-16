@@ -1,16 +1,18 @@
+'use client'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { formatPrice } from '@/lib/utils'
 import { ShoppingBag, TrendingUp, DollarSign, Award } from 'lucide-react'
 import type { SalesReport } from '@/types'
 
-export const revalidate = 60
+export default function SalesPage() {
+  const [sales, setSales] = useState<SalesReport | null>(null)
 
-async function getSales() {
-  return api.get<SalesReport>('/sales/today')
-}
+  useEffect(() => {
+    api.get<SalesReport>('/sales/today').then(setSales).catch(() => {})
+  }, [])
 
-export default async function SalesPage() {
-  const sales = await getSales()
+  if (!sales) return <div className="p-8 text-gray-400">Cargando...</div>
 
   const stats = [
     {

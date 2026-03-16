@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { io } from 'socket.io-client'
+import type { Socket } from 'socket.io-client'
 import { motion, AnimatePresence } from 'framer-motion'
 import { api } from '@/lib/api'
 import { formatPrice, cn } from '@/lib/utils'
@@ -110,7 +110,7 @@ function buildWhatsAppUrl(order: Order) {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`
 }
 
-export default function AdminOrdersPage() {
+function AdminOrdersContent() {
   const [orders, setOrders] = useState<Order[]>([])
   const [filter, setFilter] = useState<OrderStatus | 'ALL' | 'EN_PROCESO'>('ALL')
   const { alert } = useLowStock()
@@ -132,17 +132,20 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     loadOrders().then(() => { isFirstLoad.current = false })
-    const socket = io(`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}/orders`)
-    socket.emit('join_dashboard')
-    socket.on('new_order', (o: Order) => {
-      setOrders((p) => [o, ...p])
-      if (!isFirstLoad.current) {
-        playNotificationSound()
-        sendBrowserNotification(o)
-      }
+    let socket: Socket
+    import('socket.io-client').then(({ io }) => {
+      socket = io(`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}/orders`)
+      socket.emit('join_dashboard')
+      socket.on('new_order', (o: Order) => {
+        setOrders((p) => [o, ...p])
+        if (!isFirstLoad.current) {
+          playNotificationSound()
+          sendBrowserNotification(o)
+        }
+      })
+      socket.on('order_updated', (u: Order) => setOrders((p) => p.map((o) => (o.id === u.id ? u : o))))
     })
-    socket.on('order_updated', (u: Order) => setOrders((p) => p.map((o) => (o.id === u.id ? u : o))))
-    return () => { socket.disconnect() }
+    return () => { socket?.disconnect() }
   }, [loadOrders])
 
   async function updateStatus(id: number, status: OrderStatus) {
@@ -421,3 +424,6 @@ export default function AdminOrdersPage() {
     </div>
   )
 }
+
+import dynamic from 'next/dynamic'
+export default dynamic(() => Promise.resolve(AdminOrdersContent), { ssr: false })

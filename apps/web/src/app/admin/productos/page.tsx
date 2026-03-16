@@ -278,24 +278,30 @@ export default function ProductsAdminPage() {
                   {/* ── Tab: Info ── */}
                   {activeTab === 'info' && (
                     <div className="space-y-4">
-                      {([
-                        { label: 'Nombre', field: 'name', placeholder: 'Nombre del producto', required: true },
-                        { label: 'Descripción', field: 'description', placeholder: 'Descripción breve' },
-                        { label: 'Precio (₡)', field: 'price', placeholder: '3000', type: 'number', required: true },
-                        { label: 'URL de imagen', field: 'imageUrl', placeholder: 'https://...' },
-                      ] as const).map(({ label, field, placeholder, type, required }) => (
-                        <div key={field}>
-                          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{label}</label>
-                          <input
-                            required={required}
-                            type={type || 'text'}
-                            placeholder={placeholder}
-                            value={form[field]}
-                            onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-                            className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
-                          />
-                        </div>
-                      ))}
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Nombre</label>
+                        <input required type="text" placeholder="Nombre del producto" value={form.name}
+                          onChange={(e) => setForm({ ...form, name: e.target.value })}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Descripción</label>
+                        <input type="text" placeholder="Descripción breve" value={form.description}
+                          onChange={(e) => setForm({ ...form, description: e.target.value })}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Precio (₡)</label>
+                        <input required type="number" placeholder="3000" value={form.price}
+                          onChange={(e) => setForm({ ...form, price: e.target.value })}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">URL de imagen</label>
+                        <input type="text" placeholder="https://..." value={form.imageUrl}
+                          onChange={(e) => setForm({ ...form, imageUrl: e.target.value })}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent" />
+                      </div>
                       <div>
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Categoría</label>
                         <select

@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -261,6 +261,14 @@ const cardVariants = {
 }
 
 export default function MenuPage() {
+  return (
+    <Suspense>
+      <MenuContent />
+    </Suspense>
+  )
+}
+
+function MenuContent() {
   const { add, count, total } = useCart()
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
