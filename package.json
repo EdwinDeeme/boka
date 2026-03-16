@@ -1,0 +1,19 @@
+{
+  "name": "boka-app",
+  "private": true,
+  "packageManager": "npm@10.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "db:generate": "turbo run db:generate",
+    "db:migrate": "turbo run db:migrate",
+    "db:studio": "cd packages/prisma && npx prisma studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}

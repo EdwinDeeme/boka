@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id       Int       @id @default(autoincrement())
+  name     String    @unique
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id          Int              @id @default(autoincrement())
+  name        String
+  description String?
+  price       Int
+  categoryId  Int
+  category    Category         @relation(fields: [categoryId], references: [id])
+  imageUrl    String?
+  active      Boolean          @default(true)
+  orderItems  OrderItem[]
+  inventory   ProductInventory[]
+  extras      ProductExtra[]   @relation("ProductExtras")
+  availableIn ProductExtra[]   @relation("ExtraProducts")
+
+  @@map("products")
+}
+
+// Relación producto → extras disponibles
+model ProductExtra {
+  productId Int
+  product   Product @relation("ProductExtras", fields: [productId], references: [id])
+  extraId   Int
+  extra     Product @relation("ExtraProducts", fields: [extraId], references: [id])
+
+  @@id([productId, extraId])
+  @@map("product_extras")
+}
+
+model Order {
+  id            Int           @id @default(autoincrement())
+  customerName  String
+  phone         String
+  address       String?
+  deliveryType  DeliveryType
+  paymentMethod PaymentMethod
+  status        OrderStatus   @default(NUEVO)
+  total         Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  items         OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  order     Order   @relation(fields: [orderId], references: [id])
+  productId Int
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Int
+
+  @@map("order_items")
+}
+
+model InventoryItem {
+  id       Int              @id @default(autoincrement())
+  name     String
+  stock    Float
+  unit     String
+  products ProductInventory[]
+
+  @@map("inventory_items")
+}
+
+model ProductInventory {
+  productId       Int
+  product         Product       @relation(fields: [productId], references: [id])
+  inventoryItemId Int
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  quantityUsed    Float
+
+  @@id([productId, inventoryItemId])
+  @@map("product_inventory")
+}
+
+enum DeliveryType {
+  PICKUP
+  ENVIO
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  SINPE
+}
+
+enum OrderStatus {
+  NUEVO
+  ACEPTADO
+  PREPARANDO
+  LISTO
+  ENVIANDO
+  ENTREGADO
+  CANCELADO
+}
