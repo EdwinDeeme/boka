@@ -16,18 +16,19 @@ model Category {
 }
 
 model Product {
-  id          Int              @id @default(autoincrement())
-  name        String
-  description String?
-  price       Int
-  categoryId  Int
-  category    Category         @relation(fields: [categoryId], references: [id])
-  imageUrl    String?
-  active      Boolean          @default(true)
-  orderItems  OrderItem[]
-  inventory   ProductInventory[]
-  extras      ProductExtra[]   @relation("ProductExtras")
-  availableIn ProductExtra[]   @relation("ExtraProducts")
+  id           Int              @id @default(autoincrement())
+  name         String
+  description  String?
+  price        Int
+  categoryId   Int
+  category     Category         @relation(fields: [categoryId], references: [id])
+  imageUrl     String?
+  active       Boolean          @default(true)
+  deliveryDate DateTime?
+  orderItems   OrderItem[]
+  inventory    ProductInventory[]
+  extras       ProductExtra[]   @relation("ProductExtras")
+  availableIn  ProductExtra[]   @relation("ExtraProducts")
 
   @@map("products")
 }
@@ -60,13 +61,16 @@ model Order {
 }
 
 model OrderItem {
-  id        Int     @id @default(autoincrement())
+  id        Int        @id @default(autoincrement())
   orderId   Int
-  order     Order   @relation(fields: [orderId], references: [id])
+  order     Order      @relation(fields: [orderId], references: [id])
   productId Int
-  product   Product @relation(fields: [productId], references: [id])
+  product   Product    @relation(fields: [productId], references: [id])
   quantity  Int
   price     Int
+  parentItemId Int?
+  parent    OrderItem? @relation("ItemExtras", fields: [parentItemId], references: [id])
+  extras    OrderItem[] @relation("ItemExtras")
 
   @@map("order_items")
 }

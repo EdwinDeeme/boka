@@ -22,6 +22,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean
+
+  @IsOptional()
+  deliveryDate?: string | null
 }
 
 export class UpdateProductDto {
@@ -49,4 +52,7 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean
+
+  @IsOptional()
+  deliveryDate?: string | null
 }

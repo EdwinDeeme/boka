@@ -12,13 +12,19 @@ export type Product = {
   category: Category
   imageUrl?: string
   active: boolean
+  deliveryDate?: string | null
   extras?: { extra: Product }[]
   inventory?: { inventoryItemId: number; quantityUsed: number }[]
+}
+
+export type CartItemInstance = {
+  extras: { product: Product; quantity: number }[]
 }
 
 export type CartItem = {
   product: Product
   quantity: number
+  instances: CartItemInstance[] // una por unidad del producto
 }
 
 export type OrderStatus =
@@ -46,6 +52,12 @@ export type Order = {
     quantity: number
     price: number
     product: Product
+    extras: {
+      id: number
+      quantity: number
+      price: number
+      product: Product
+    }[]
   }[]
 }
 

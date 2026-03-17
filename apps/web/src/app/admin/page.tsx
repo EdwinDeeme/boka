@@ -7,12 +7,321 @@ import { formatPrice, cn } from '@/lib/utils'
 import {
   Clock, ChevronRight, ChevronLeft, Phone, MapPin,
   Package, ExternalLink, Store, Truck, Banknote, Smartphone, Bell,
+  Plus, Minus, X, ClipboardList,
 } from 'lucide-react'
 import { useLowStock } from '@/hooks/useLowStock'
 import { LowStockBadge } from '@/components/LowStockBadge'
-import type { Order, OrderStatus } from '@/types'
+import type { Order, OrderStatus, Product } from '@/types'
+
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'
 
 const WHATSAPP_NUMBER = '50672074577'
+
+// Una instancia de un producto en el pedido manual, con sus extras
+type ManualInstance = { extras: { product: Product; quantity: number }[] }
+type ManualItem = { product: Product; instances: ManualInstance[]; expanded: boolean }
+
+// Panel de extras para una instancia específica
+function ExtrasPanel({ product, instance, allProducts, onChange }: {
+  product: Product
+  instance: ManualInstance
+  allProducts: Product[]
+  onChange: (inst: ManualInstance) => void
+}) {
+  const availableExtras = product.extras?.map((e) => e.extra).filter(Boolean) ?? []
+  if (availableExtras.length === 0) return <p className="text-xs text-gray-400 italic">Sin extras disponibles</p>
+  return (
+    <div className="space-y-1.5">
+      {availableExtras.map((extra) => {
+        const current = instance.extras.find((e) => e.product.id === extra.id)
+        const qty = current?.quantity ?? 0
+        function setQty(q: number) {
+          const next = instance.extras.filter((e) => e.product.id !== extra.id)
+          onChange({ extras: q > 0 ? [...next, { product: extra, quantity: q }] : next })
+        }
+        return (
+          <div key={extra.id} className="flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-600 flex-1">{extra.name} <span className="text-gray-400">+{formatPrice(extra.price)}</span></span>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setQty(Math.max(0, qty - 1))}
+                className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-30"
+                disabled={qty === 0}>
+                <Minus size={9} />
+              </button>
+              <span className="w-4 text-center text-xs font-bold text-gray-700">{qty}</span>
+              <button type="button" onClick={() => setQty(qty + 1)}
+                className="w-5 h-5 rounded-full bg-brand-500 text-white flex items-center justify-center hover:bg-brand-600">
+                <Plus size={9} />
+              </button>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function NewOrderModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+  const [allProducts, setAllProducts] = useState<Product[]>([])
+  const [items, setItems] = useState<ManualItem[]>([])
+  const [form, setForm] = useState({ customerName: '', phone: '', paymentMethod: 'EFECTIVO' as 'EFECTIVO' | 'SINPE', deliveryType: 'PICKUP' as 'PICKUP' | 'ENVIO' })
+  const [loading, setLoading] = useState(false)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    if (open) {
+      fetch(`${API}/products`)
+        .then((r) => r.json())
+        .then((data: Product[]) => setAllProducts(data.filter((p) => p.active && p.category?.name !== 'Extras')))
+    }
+  }, [open])
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) { setItems([]); setForm({ customerName: '', phone: '', paymentMethod: 'EFECTIVO', deliveryType: 'PICKUP' }); setSearch('') }
+  }, [open])
+
+  function setQty(productId: number, qty: number) {
+    setItems((prev) => {
+      const existing = prev.find((i) => i.product.id === productId)
+      if (!existing) {
+        if (qty <= 0) return prev
+        const product = allProducts.find((p) => p.id === productId)!
+        // Auto-expandir si tiene extras al agregar la primera unidad
+        const hasExtras = (product.extras?.length ?? 0) > 0
+        return [...prev, { product, instances: Array.from({ length: qty }, () => ({ extras: [] })), expanded: hasExtras }]
+      }
+      if (qty <= 0) return prev.filter((i) => i.product.id !== productId)
+      const diff = qty - existing.instances.length
+      const newInstances = diff > 0
+        ? [...existing.instances, ...Array.from({ length: diff }, () => ({ extras: [] }))]
+        : existing.instances.slice(0, qty)
+      return prev.map((i) => i.product.id === productId ? { ...i, instances: newInstances } : i)
+    })
+  }
+
+  function toggleExpand(productId: number) {
+    setItems((prev) => prev.map((i) => i.product.id === productId ? { ...i, expanded: !i.expanded } : i))
+  }
+
+  function updateInstance(productId: number, instIdx: number, inst: ManualInstance) {
+    setItems((prev) => prev.map((i) => {
+      if (i.product.id !== productId) return i
+      const instances = i.instances.map((ins, idx) => idx === instIdx ? inst : ins)
+      return { ...i, instances }
+    }))
+  }
+
+  const visibleProducts = allProducts.filter((p) =>
+    !search || p.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const total = items.reduce((s, i) => {
+    const base = i.product.price * i.instances.length
+    const extras = i.instances.reduce((es, inst) => es + inst.extras.reduce((x, e) => x + e.product.price * e.quantity, 0), 0)
+    return s + base + extras
+  }, 0)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (items.length === 0) return
+    setLoading(true)
+    try {
+      await api.post('/orders', {
+        customerName: form.customerName || 'Cliente local',
+        phone: form.phone || '0000-0000',
+        address: '',
+        deliveryType: form.deliveryType,
+        paymentMethod: form.paymentMethod,
+        items: items.map((i) => ({
+          productId: i.product.id,
+          instances: i.instances.map((inst) => ({
+            extras: inst.extras.map((e) => ({ productId: e.product.id, quantity: e.quantity })),
+          })),
+        })),
+      })
+      onCreated()
+      onClose()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 16 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+              <h2 className="font-bold text-gray-900">Nuevo pedido manual</h2>
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors">
+                <X size={17} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+              <div className="overflow-y-auto flex-1 p-5 space-y-5">
+
+                {/* Datos cliente */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Nombre</label>
+                    <input value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })}
+                      placeholder="Cliente local"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Teléfono</label>
+                    <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      placeholder="0000-0000"
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent" />
+                  </div>
+                </div>
+
+                {/* Entrega + Pago */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Entrega</label>
+                    <div className="flex gap-2">
+                      {(['PICKUP', 'ENVIO'] as const).map((v) => (
+                        <button key={v} type="button" onClick={() => setForm({ ...form, deliveryType: v })}
+                          className={cn('flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all',
+                            form.deliveryType === v ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-500')}>
+                          {v === 'PICKUP' ? 'Para recoger' : 'Express'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Pago</label>
+                    <div className="flex gap-2">
+                      {(['EFECTIVO', 'SINPE'] as const).map((v) => (
+                        <button key={v} type="button" onClick={() => setForm({ ...form, paymentMethod: v })}
+                          className={cn('flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all',
+                            form.paymentMethod === v ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-gray-200 text-gray-500')}>
+                          {v === 'EFECTIVO' ? 'Efectivo' : 'SINPE'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de productos */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Productos</label>
+                  <input value={search} onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Filtrar productos..."
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent mb-2" />
+                  <div className="border border-gray-100 rounded-xl overflow-hidden divide-y divide-gray-50">
+                    {visibleProducts.length === 0 && (
+                      <p className="text-xs text-gray-400 text-center py-4">Sin resultados</p>
+                    )}
+                    {visibleProducts.map((p) => {
+                      const item = items.find((i) => i.product.id === p.id)
+                      const qty = item?.instances.length ?? 0
+                      const hasExtras = (p.extras?.length ?? 0) > 0
+                      return (
+                        <div key={p.id}>
+                          <div className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold text-gray-800 truncate">{p.name}</p>
+                              <p className="text-xs text-brand-600 font-bold">{formatPrice(p.price)}</p>
+                            </div>
+                            {qty > 0 && hasExtras && (
+                              <button type="button" onClick={() => toggleExpand(p.id)}
+                                className="text-xs text-brand-500 font-semibold px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors shrink-0">
+                                Extras {item?.expanded ? '▲' : '▼'}
+                              </button>
+                            )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button type="button" onClick={() => setQty(p.id, qty - 1)}
+                                className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                                disabled={qty === 0}>
+                                <Minus size={12} />
+                              </button>
+                              <span className="w-5 text-center text-sm font-bold text-gray-800">{qty}</span>
+                              <button type="button" onClick={() => setQty(p.id, qty + 1)}
+                                className="w-7 h-7 rounded-full bg-brand-500 text-white flex items-center justify-center hover:bg-brand-600 transition-colors">
+                                <Plus size={12} />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Panel de extras por instancia */}
+                          {item?.expanded && hasExtras && (
+                            <div className="bg-gray-50 px-4 py-3 space-y-3 border-t border-gray-100">
+                              {item.instances.map((inst, idx) => (
+                                <div key={idx}>
+                                  <p className="text-xs font-bold text-gray-500 mb-1.5">
+                                    {p.name} #{idx + 1}
+                                  </p>
+                                  <ExtrasPanel
+                                    product={p}
+                                    instance={inst}
+                                    allProducts={allProducts}
+                                    onChange={(updated) => updateInstance(p.id, idx, updated)}
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Resumen del pedido */}
+                {items.length > 0 && (
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-1">Resumen</p>
+                    {items.map((item) => {
+                      const extrasTotal = item.instances.reduce((s, inst) =>
+                        s + inst.extras.reduce((x, e) => x + e.product.price * e.quantity, 0), 0)
+                      return (
+                        <div key={item.product.id} className="flex justify-between text-sm">
+                          <span className="text-gray-700">{item.product.name} <span className="text-gray-400">×{item.instances.length}</span></span>
+                          <span className="font-semibold text-gray-800">{formatPrice(item.product.price * item.instances.length + extrasTotal)}</span>
+                        </div>
+                      )
+                    })}
+                    <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                      <span className="text-sm font-bold text-gray-700">Total</span>
+                      <span className="text-lg font-black text-brand-600">{formatPrice(total)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex gap-3 px-5 py-4 border-t border-gray-100 shrink-0">
+                <button type="button" onClick={onClose}
+                  className="flex-1 border border-gray-200 py-2.5 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={loading || items.length === 0}
+                  className="flex-1 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-semibold transition-colors">
+                  {loading ? 'Creando...' : `Crear pedido · ${formatPrice(total)}`}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
 
 const STATUS_CONFIG: Record<OrderStatus, { label: string; bg: string; text: string; border: string; dot: string }> = {
   NUEVO:      { label: 'Nuevo',      bg: 'bg-amber-50',  text: 'text-amber-700',  border: 'border-amber-300',  dot: 'bg-amber-400' },
@@ -41,8 +350,8 @@ const PREV_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 const IN_PROGRESS_STATUSES: OrderStatus[] = ['NUEVO', 'ACEPTADO', 'PREPARANDO', 'LISTO', 'ENVIANDO']
 
 const FILTERS: { value: OrderStatus | 'ALL' | 'EN_PROCESO'; label: string; dot?: string }[] = [
-  { value: 'ALL',        label: 'Todos' },
   { value: 'EN_PROCESO', label: 'En proceso', dot: 'bg-brand-400' },
+  { value: 'ALL',        label: 'Todos' },
   { value: 'NUEVO',      label: 'Nuevos',     dot: 'bg-amber-400' },
   { value: 'ACEPTADO',   label: 'Aceptados',  dot: 'bg-blue-400' },
   { value: 'PREPARANDO', label: 'Preparando', dot: 'bg-orange-400' },
@@ -65,9 +374,21 @@ function timeInStatus(date: string) {
   return `${Math.floor(diff / 3600)}h en este estado`
 }
 
+let audioCtx: AudioContext | null = null
+
+function getAudioContext() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume()
+  }
+  return audioCtx
+}
+
 function playNotificationSound() {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const ctx = getAudioContext()
     const times = [0, 0.15, 0.3]
     times.forEach((t) => {
       const osc = ctx.createOscillator()
@@ -88,8 +409,8 @@ function sendBrowserNotification(order: Order) {
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission === 'granted') {
     new Notification(`🛵 Nuevo pedido #${order.id}`, {
-      body: `${order.customerName} — ${formatPrice(order.total)} · ${order.deliveryType === 'ENVIO' ? 'Envío' : 'Pickup'}`,
-      icon: '/icon-192.png',
+      body: `${order.customerName} — ${formatPrice(order.total)} · ${order.deliveryType === 'ENVIO' ? 'Express' : 'Para recoger'}`,
+      icon: '/boka-logo.png',
       tag: `order-${order.id}`,
     })
   }
@@ -105,14 +426,15 @@ function buildWhatsAppUrl(order: Order) {
   const coords = extractCoords(order.address)
   const mapsLink = coords ? `https://maps.google.com/?q=${coords.lat},${coords.lng}` : 'Sin coordenadas'
   const msg = encodeURIComponent(
-    `Hola Express 🛵\n\nPedido #${order.id} listo para entregar.\n\nCliente: ${order.customerName}\nTeléfono: ${order.phone}\nDirección: ${order.address?.replace(/\[.*\]/, '').trim() || 'Pickup'}\n\nUbicación: ${mapsLink}\n\nTotal: ₡${order.total.toLocaleString()}`
+    `Hola Express 🛵\n\nPedido #${order.id} listo para entregar.\n\nCliente: ${order.customerName}\nTeléfono: ${order.phone}\nDirección: ${order.address?.replace(/\[.*\]/, '').trim() || 'Para recoger'}\n\nUbicación: ${mapsLink}\n\nTotal: ₡${order.total.toLocaleString()}`
   )
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`
 }
 
 function AdminOrdersContent() {
   const [orders, setOrders] = useState<Order[]>([])
-  const [filter, setFilter] = useState<OrderStatus | 'ALL' | 'EN_PROCESO'>('ALL')
+  const [filter, setFilter] = useState<OrderStatus | 'ALL' | 'EN_PROCESO'>('EN_PROCESO')
+  const [showNewOrder, setShowNewOrder] = useState(false)
   const { alert } = useLowStock()
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default')
   const isFirstLoad = useRef(true)
@@ -124,6 +446,10 @@ function AdminOrdersContent() {
         Notification.requestPermission().then((p) => setNotifPermission(p))
       }
     }
+    // Desbloquear AudioContext en el primer click del usuario
+    const unlock = () => { try { getAudioContext() } catch {} }
+    document.addEventListener('click', unlock, { once: true })
+    return () => document.removeEventListener('click', unlock)
   }, [])
 
   const loadOrders = useCallback(async () => {
@@ -137,7 +463,7 @@ function AdminOrdersContent() {
       socket = io(`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}/orders`)
       socket.emit('join_dashboard')
       socket.on('new_order', (o: Order) => {
-        setOrders((p) => [o, ...p])
+        setOrders((p) => p.some((x) => x.id === o.id) ? p : [o, ...p])
         if (!isFirstLoad.current) {
           playNotificationSound()
           sendBrowserNotification(o)
@@ -174,6 +500,13 @@ function AdminOrdersContent() {
           <p className="text-gray-400 text-sm">Tiempo real</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowNewOrder(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-brand-500 hover:bg-brand-600 px-3 py-2 rounded-xl transition-colors"
+          >
+            <Plus size={13} />
+            Nuevo pedido
+          </button>
           {notifPermission !== 'granted' && 'Notification' in window && (
             <button
               onClick={() => Notification.requestPermission().then((p) => setNotifPermission(p))}
@@ -283,7 +616,7 @@ function AdminOrdersContent() {
                       : 'bg-gray-100 text-gray-600 border-gray-200'
                   )}>
                     {isEnvio ? <Truck size={14} /> : <Store size={14} />}
-                    {isEnvio ? 'Envío' : 'Pickup'}
+                    {isEnvio ? 'Express' : 'Para recoger'}
                   </span>
                   <span className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold border',
@@ -299,18 +632,48 @@ function AdminOrdersContent() {
                 {/* ── Items del pedido — zona más prominente ── */}
                 <div className="px-4 py-3 border-t border-gray-100">
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Pedido</p>
-                  <div className="space-y-2">
-                    {order.items.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="bg-brand-100 text-brand-700 text-sm font-black w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
-                            {item.quantity}
-                          </span>
-                          <span className="text-base font-semibold text-gray-900 truncate">{item.product.name}</span>
-                        </div>
-                        <span className="text-sm font-bold text-gray-500 shrink-0">{formatPrice(item.price * item.quantity)}</span>
-                      </div>
-                    ))}
+                  <div className="space-y-3">
+                    {(() => {
+                      // Agrupar instancias por producto
+                      const groups: { product: Order['items'][0]['product']; price: number; instances: Order['items'][0][] }[] = []
+                      for (const item of order.items) {
+                        const g = groups.find((g) => g.product.id === item.product.id)
+                        if (g) g.instances.push(item)
+                        else groups.push({ product: item.product, price: item.price, instances: [item] })
+                      }
+                      return groups.map((g) => {
+                        const qty = g.instances.length
+                        const baseTotal = g.price * qty
+                        const extrasTotal = g.instances.reduce((s, inst) =>
+                          s + (inst.extras || []).reduce((es, e) => es + e.price * e.quantity, 0), 0)
+                        return (
+                          <div key={g.product.id}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="bg-brand-100 text-brand-700 text-sm font-black w-7 h-7 rounded-lg flex items-center justify-center shrink-0">
+                                  {qty}
+                                </span>
+                                <span className="text-base font-semibold text-gray-900 truncate">{g.product.name}</span>
+                              </div>
+                              <span className="text-sm font-bold text-gray-500 shrink-0">{formatPrice(baseTotal + extrasTotal)}</span>
+                            </div>
+                            {/* Detalle por instancia — solo si alguna tiene extras */}
+                            {g.instances.some((inst) => (inst.extras || []).length > 0) && (
+                              <div className="ml-9 mt-1.5 space-y-1">
+                                {g.instances.map((inst, idx) => (
+                                  <div key={inst.id} className="text-xs text-gray-400">
+                                    <span className="font-medium text-gray-500">#{idx + 1}</span>
+                                    {(inst.extras || []).length > 0
+                                      ? ` — ${inst.extras.map((e) => `${e.product.name}${e.quantity > 1 ? ` ×${e.quantity}` : ''}`).join(', ')}`
+                                      : ' — sin extras'}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
                   <div className="flex justify-between items-center mt-3 pt-2.5 border-t border-gray-100">
                     <span className="text-sm font-semibold text-gray-500">Total</span>
@@ -421,6 +784,7 @@ function AdminOrdersContent() {
           </div>
         )}
       </div>
+      <NewOrderModal open={showNewOrder} onClose={() => setShowNewOrder(false)} onCreated={loadOrders} />
     </div>
   )
 }

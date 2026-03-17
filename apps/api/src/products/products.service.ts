@@ -9,7 +9,10 @@ export class ProductsService {
   findAll(onlyActive = false) {
     return this.prisma.product.findMany({
       where: onlyActive ? { active: true } : undefined,
-      include: { category: true },
+      include: {
+        category: true,
+        extras: { include: { extra: { include: { category: true } } } },
+      },
       orderBy: { categoryId: 'asc' },
     })
   }
@@ -28,12 +31,23 @@ export class ProductsService {
   }
 
   create(dto: CreateProductDto) {
-    return this.prisma.product.create({ data: dto, include: { category: true } })
+    const { deliveryDate, ...rest } = dto
+    const dd = deliveryDate && typeof deliveryDate === 'string' ? new Date(deliveryDate) : null
+    return this.prisma.product.create({
+      data: { ...rest, deliveryDate: dd },
+      include: { category: true },
+    })
   }
 
   async update(id: number, dto: UpdateProductDto) {
     await this.findOne(id)
-    return this.prisma.product.update({ where: { id }, data: dto, include: { category: true } })
+    const { deliveryDate, ...rest } = dto
+    const dd = deliveryDate && typeof deliveryDate === 'string' ? new Date(deliveryDate) : null
+    return this.prisma.product.update({
+      where: { id },
+      data: { ...rest, deliveryDate: dd },
+      include: { category: true },
+    })
   }
 
   async remove(id: number) {

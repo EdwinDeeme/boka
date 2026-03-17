@@ -109,6 +109,7 @@ export default function CheckoutPage() {
 
   const billNum = parseInt(form.billAmount) || 0
   const change = billNum > grandTotal ? billNum - grandTotal : 0
+  const cashInvalid = form.paymentMethod === 'EFECTIVO' && billNum > 0 && billNum < grandTotal
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -124,7 +125,15 @@ export default function CheckoutPage() {
         address: fullAddress,
         deliveryType: form.deliveryType,
         paymentMethod: form.paymentMethod,
-        items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
+        items: items.map((i) => ({
+          productId: i.product.id,
+          instances: i.instances.map((inst) => ({
+            extras: inst.extras.map((e) => ({
+              productId: e.product.id,
+              quantity: e.quantity,
+            })),
+          })),
+        })),
       })
       setOrderId(order.id)
       // Save phone so the tracker can auto-search next time
@@ -229,13 +238,13 @@ export default function CheckoutPage() {
           <h2 className="font-semibold text-gray-900 mb-4">Tipo de entrega</h2>
           <div className="grid grid-cols-2 gap-3">
             {([
-              { value: 'PICKUP', label: 'Pickup',  sub: 'Recoger en local', icon: Store },
-              { value: 'ENVIO',  label: 'Envío',   sub: 'A domicilio',      icon: Truck },
+              { value: 'PICKUP', label: 'Para recoger', sub: 'Recoger en local', icon: Store },
+              { value: 'ENVIO',  label: 'Express',      sub: 'A domicilio',      icon: Truck },
             ] as const).map(({ value, label, sub, icon: Icon }) => (
               <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
                 onClick={() => set('deliveryType', value)}
                 className={cn(
-                  'flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all',
+                  'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
                   form.deliveryType === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
                 )}
               >
@@ -345,7 +354,7 @@ export default function CheckoutPage() {
               <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
                 onClick={() => set('paymentMethod', value)}
                 className={cn(
-                  'flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all',
+                  'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
                   form.paymentMethod === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
                 )}
               >
@@ -466,12 +475,28 @@ export default function CheckoutPage() {
         >
           <h2 className="font-semibold text-gray-900 mb-4">Resumen del pedido</h2>
           <div className="space-y-2 mb-4">
-            {items.map((i) => (
-              <div key={i.product.id} className="flex justify-between text-sm">
-                <span className="text-gray-600">{i.product.name} <span className="text-gray-400">× {i.quantity}</span></span>
-                <span className="font-medium text-gray-900">{formatPrice(i.product.price * i.quantity)}</span>
-              </div>
-            ))}
+            {items.map((i) => {
+              const extrasTotal = i.instances.reduce((s, inst) =>
+                s + inst.extras.reduce((es, e) => es + e.product.price * e.quantity, 0), 0)
+              const withExtras = i.instances.filter((inst) => inst.extras.length > 0)
+              return (
+                <div key={i.product.id}>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">{i.product.name} <span className="text-gray-400">× {i.quantity}</span></span>
+                    <span className="font-medium text-gray-900">{formatPrice(i.product.price * i.quantity + extrasTotal)}</span>
+                  </div>
+                  {withExtras.length > 0 && (
+                    <div className="pl-3 mt-0.5 space-y-0.5">
+                      {withExtras.map((inst, idx) => (
+                        <p key={idx} className="text-xs text-gray-400">
+                          #{i.instances.indexOf(inst) + 1}: {inst.extras.map((e) => `${e.product.name}${e.quantity > 1 ? ` ×${e.quantity}` : ''} extra`).join(', ')}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
           <div className="border-t border-gray-100 pt-3 space-y-2">
             <div className="flex justify-between text-sm text-gray-500">
@@ -516,7 +541,7 @@ export default function CheckoutPage() {
           <motion.button
             whileTap={{ scale: 0.98 }}
             onClick={handleSubmit}
-            disabled={loading || items.length === 0}
+            disabled={loading || items.length === 0 || cashInvalid}
             className="w-full flex items-center justify-between bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-2xl transition-colors font-semibold"
           >
             <span>{loading ? 'Procesando...' : 'Confirmar pedido'}</span>

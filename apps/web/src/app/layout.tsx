@@ -7,12 +7,13 @@ const jakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
   variable: '--font-jakarta',
   display: 'swap',
+  preload: false,
   weight: ['400', '500', '600', '700', '800'],
 })
 
 export const metadata: Metadata = {
   title: 'BOKA — Comida rápida a tu puerta',
-  description: 'Pedidos en línea. Pickup o envío a domicilio.',
+  description: 'Pedidos en línea. Para recoger o envío a domicilio.',
   manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'default', title: 'BOKA' },
 }
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es" className={jakarta.variable}>
       <head>
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" href="/boka-logo.png" />
       </head>
       <body className="font-sans">
         <Providers>{children}</Providers>

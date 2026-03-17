@@ -1,23 +1,26 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, X, Package, Layers, FlaskConical, Check } from 'lucide-react'
+import { Plus, Trash2, X, Package, Layers, FlaskConical, Check, CalendarDays } from 'lucide-react'
 import { api } from '@/lib/api'
 import { formatPrice, cn } from '@/lib/utils'
 import { useLowStock } from '@/hooks/useLowStock'
 import { LowStockBadge } from '@/components/LowStockBadge'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import type { Product, Category, InventoryItem } from '@/types'
 
 type ProductForm = {
   name: string; description: string; price: string
   categoryId: string; imageUrl: string; active: boolean
+  deliveryDate: string // ISO date string YYYY-MM-DD or ''
 }
 type InventoryLine = { inventoryItemId: number; quantityUsed: number }
 type Capacity = { productId: number; productName: string; capacity: number | null }
-type Tab = 'info' | 'extras' | 'inventario'
+type Tab = 'info' | 'extras' | 'inventario' | 'entrega'
 
 const emptyForm: ProductForm = {
   name: '', description: '', price: '', categoryId: '', imageUrl: '', active: true,
+  deliveryDate: '',
 }
 
 export default function ProductsAdminPage() {
@@ -31,6 +34,7 @@ export default function ProductsAdminPage() {
   const [form, setForm] = useState<ProductForm>(emptyForm)
   const [selectedExtras, setSelectedExtras] = useState<number[]>([])
   const [inventoryLines, setInventoryLines] = useState<InventoryLine[]>([])
+  const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     const [prods, cats, inv, caps] = await Promise.all([
@@ -62,6 +66,7 @@ export default function ProductsAdminPage() {
       name: p.name, description: p.description || '',
       price: p.price.toString(), categoryId: p.categoryId.toString(),
       imageUrl: p.imageUrl || '', active: p.active,
+      deliveryDate: p.deliveryDate ? p.deliveryDate.slice(0, 10) : '',
     })
     setActiveTab('info')
     // Load full detail (extras + inventory)
@@ -82,6 +87,7 @@ export default function ProductsAdminPage() {
       name: form.name, description: form.description,
       price: parseInt(form.price), categoryId: parseInt(form.categoryId),
       imageUrl: form.imageUrl || undefined, active: form.active,
+      deliveryDate: form.deliveryDate || null,
     }
     let productId: number
     if (editing) {
@@ -100,8 +106,8 @@ export default function ProductsAdminPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar este producto?')) return
     await api.delete(`/products/${id}`)
+    setDeleteId(null)
     load()
   }
 
@@ -128,10 +134,13 @@ export default function ProductsAdminPage() {
   const extraProducts = products.filter((p) => p.category?.name === 'Extras')
   const capacityMap = Object.fromEntries(capacities.map((c) => [c.productId, c.capacity]))
 
+  const isExtraCategory = categories.find((c) => c.id === parseInt(form.categoryId))?.name === 'Extras'
+
   const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'info',       label: 'Info',       icon: <Package size={14} /> },
-    { id: 'extras',     label: 'Extras',     icon: <Layers size={14} /> },
+    ...(!isExtraCategory ? [{ id: 'extras' as Tab, label: 'Extras', icon: <Layers size={14} /> }] : []),
     { id: 'inventario', label: 'Inventario', icon: <FlaskConical size={14} /> },
+    { id: 'entrega',    label: 'Entrega',    icon: <CalendarDays size={14} /> },
   ]
 
   return (
@@ -171,7 +180,7 @@ export default function ProductsAdminPage() {
               const cap = capacityMap[p.id]
               const lowStock = cap !== undefined && cap !== null && cap <= 3
               return (
-                <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
+                <tr key={p.id} onClick={() => openEdit(p)} className="hover:bg-orange-50/40 transition-colors cursor-pointer">
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 bg-orange-50 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
@@ -194,7 +203,7 @@ export default function ProductsAdminPage() {
                       <span className="text-gray-300 text-xs">—</span>
                     ) : (
                       <span className={cn(
-                        'inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full',
+                        'inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap',
                         lowStock
                           ? 'bg-red-50 text-red-600'
                           : 'bg-green-50 text-green-700'
@@ -205,20 +214,25 @@ export default function ProductsAdminPage() {
                     )}
                   </td>
                   <td className="px-5 py-3.5">
-                    <span className={cn(
-                      'inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full',
-                      p.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'
-                    )}>
-                      <span className={cn('w-1.5 h-1.5 rounded-full', p.active ? 'bg-green-400' : 'bg-gray-300')} />
-                      {p.active ? 'Activo' : 'Inactivo'}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className={cn(
+                        'inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full w-fit',
+                        p.active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'
+                      )}>
+                        <span className={cn('w-1.5 h-1.5 rounded-full', p.active ? 'bg-green-400' : 'bg-gray-300')} />
+                        {p.active ? 'Activo' : 'Inactivo'}
+                      </span>
+                      {p.deliveryDate && (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 w-fit whitespace-nowrap">
+                          <CalendarDays size={10} />
+                          {new Date(p.deliveryDate).toLocaleDateString('es-CR', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className="px-5 py-3.5">
+                  <td className="px-5 py-3.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1 justify-end">
-                      <button onClick={() => openEdit(p)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={() => handleDelete(p.id)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+                      <button onClick={() => setDeleteId(p.id)} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors">
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -230,7 +244,7 @@ export default function ProductsAdminPage() {
         </table>
       </div>
 
-      {/* Modal */}
+      {/* Modal producto */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -255,13 +269,13 @@ export default function ProductsAdminPage() {
               </div>
 
               {/* Tabs */}
-              <div className="flex border-b border-gray-100 px-6">
+              <div className="flex border-b border-gray-100 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
                 {TABS.map((tab) => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={cn(
-                      'flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors -mb-px',
+                      'flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-colors -mb-px shrink-0',
                       activeTab === tab.id
                         ? 'border-brand-500 text-brand-600'
                         : 'border-transparent text-gray-400 hover:text-gray-600'
@@ -273,7 +287,7 @@ export default function ProductsAdminPage() {
               </div>
 
               <form onSubmit={handleSubmit}>
-                <div className="p-6 max-h-[60vh] overflow-y-auto">
+                <div className="p-6 max-h-[65vh] overflow-y-auto overscroll-contain">
 
                   {/* ── Tab: Info ── */}
                   {activeTab === 'info' && (
@@ -307,7 +321,11 @@ export default function ProductsAdminPage() {
                         <select
                           required
                           value={form.categoryId}
-                          onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                          onChange={(e) => {
+                            const isExtras = categories.find((c) => c.id === parseInt(e.target.value))?.name === 'Extras'
+                            if (isExtras && (activeTab as string) === 'extras') setActiveTab('info')
+                            setForm({ ...form, categoryId: e.target.value })
+                          }}
                           className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white"
                         >
                           <option value="">Seleccionar categoría</option>
@@ -417,6 +435,46 @@ export default function ProductsAdminPage() {
                       )}
                     </div>
                   )}
+
+                  {/* ── Tab: Entrega ── */}
+                  {activeTab === 'entrega' && (
+                    <div className="space-y-5">
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                        <p className="text-sm font-semibold text-amber-800 mb-1">Pedido por encargo</p>
+                        <p className="text-xs text-amber-700 leading-relaxed">
+                          Si asignas una fecha de entrega, el producto se mostrará como "por encargo" en el menú.
+                          Los clientes verán claramente que están reservando para ese día.
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                          Fecha de entrega
+                        </label>
+                        <input
+                          type="date"
+                          value={form.deliveryDate}
+                          min={new Date().toISOString().slice(0, 10)}
+                          onChange={(e) => setForm({ ...form, deliveryDate: e.target.value })}
+                          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
+                        />
+                        <p className="text-xs text-gray-400 mt-1.5">Deja vacío para venta inmediata (sin fecha de encargo).</p>
+                      </div>
+                      {form.deliveryDate && (
+                        <div className="flex items-center justify-between bg-brand-50 border border-brand-200 rounded-xl px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <CalendarDays size={16} className="text-brand-600" />
+                            <span className="text-sm font-semibold text-brand-700">
+                              Entrega el {new Date(form.deliveryDate + 'T12:00:00').toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </span>
+                          </div>
+                          <button type="button" onClick={() => setForm({ ...form, deliveryDate: '' })}
+                            className="text-xs text-brand-500 hover:text-brand-700 font-semibold">
+                            Quitar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer */}
@@ -440,6 +498,15 @@ export default function ProductsAdminPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <ConfirmModal
+        open={deleteId !== null}
+        title="Eliminar producto"
+        message="Esta acción no se puede deshacer. ¿Seguro que quieres eliminar este producto?"
+        confirmLabel="Eliminar"
+        onConfirm={() => deleteId !== null && handleDelete(deleteId)}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   )
 }

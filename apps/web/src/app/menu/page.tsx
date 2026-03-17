@@ -4,9 +4,9 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ShoppingCart, Plus, Search, X, Minus, Sparkles, ClipboardList } from 'lucide-react'
+import { ShoppingCart, Plus, Search, X, Minus, Sparkles, ClipboardList, CalendarDays } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
-import { formatPrice } from '@/lib/utils'
+import { formatPrice, cn } from '@/lib/utils'
 import { CartDrawer } from '@/components/CartDrawer'
 import { OrderTracker } from '@/components/OrderTracker'
 import type { Product, Category } from '@/types'
@@ -25,6 +25,24 @@ function getImage(product: Product) {
   return product.imageUrl || FALLBACK_IMAGES[product.category?.name] || DEFAULT_IMG
 }
 
+function formatDeliveryDate(date: string) {
+  return new Date(date).toLocaleDateString('es-CR', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+function DeliveryBadge({ date, className }: { date: string; className?: string }) {
+  const d = new Date(date)
+  const weekday = d.toLocaleDateString('es-CR', { weekday: 'long' })
+  const dayMonth = d.toLocaleDateString('es-CR', { day: 'numeric', month: 'long' })
+  return (
+    <span className={cn(
+      'inline-flex items-center text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300',
+      className
+    )}>
+      Para {weekday} {dayMonth}
+    </span>
+  )
+}
+
 // ── Modal de detalle ──────────────────────────────────────────────────────────
 function ProductModal({
   product,
@@ -35,10 +53,10 @@ function ProductModal({
   allProducts: Product[]
   onClose: () => void
 }) {
-  const { add, items, updateQty } = useCart()
+  const { add, addExtraToInstance, removeExtraFromInstance, items, updateQty } = useCart()
   const [detail, setDetail] = useState<Product | null>(null)
+  const [selectedInstance, setSelectedInstance] = useState(0)
 
-  // Cargar detalle con extras
   useEffect(() => {
     fetch(`${API}/products/${product.id}`)
       .then((r) => r.json())
@@ -48,20 +66,16 @@ function ProductModal({
   const cartItem = items.find((i) => i.product.id === product.id)
   const qty = cartItem?.quantity || 0
 
-  // Extras asignados al producto
+  // Resetear instancia seleccionada si cambia la cantidad
+  useEffect(() => { setSelectedInstance(0) }, [qty])
+
   const extras: Product[] = (detail?.extras ?? []).map((e: any) => e.extra)
 
-  // Recomendaciones: primero bebidas, luego otras salchipapas (excluyendo el producto actual)
-  const drinks = allProducts.filter(
-    (p) => p.category?.name === 'Bebidas' && p.id !== product.id && p.active,
-  )
-  const others = allProducts.filter(
-    (p) =>
-      p.category?.name === product.category?.name &&
-      p.id !== product.id &&
-      p.active,
-  )
+  const drinks = allProducts.filter((p) => p.category?.name === 'Bebidas' && p.id !== product.id && p.active)
+  const others = allProducts.filter((p) => p.category?.name === product.category?.name && p.id !== product.id && p.active)
   const recommendations = [...drinks, ...others].slice(0, 4)
+
+  const currentInstance = cartItem?.instances[selectedInstance]
 
   return (
     <motion.div
@@ -93,10 +107,13 @@ function ProductModal({
           >
             <X size={18} />
           </motion.button>
-          <div className="absolute bottom-4 left-4">
+          <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
             <span className="bg-white/20 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1 rounded-full border border-white/30">
               {product.category?.name}
             </span>
+            {product.deliveryDate && (
+              <DeliveryBadge date={product.deliveryDate} />
+            )}
           </div>
         </div>
 
@@ -115,27 +132,45 @@ function ProductModal({
             {/* Extras */}
             {extras.length > 0 && (
               <div className="mb-5">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">
-                  Extras disponibles
-                </p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Extras disponibles</p>
+                  {qty > 1 && (
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+                      {cartItem!.instances.map((_, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => setSelectedInstance(idx)}
+                          className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                            selectedInstance === idx
+                              ? 'bg-brand-500 text-white shadow-sm'
+                              : 'text-gray-500 hover:bg-gray-200'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {qty > 1 && (
+                  <p className="text-xs text-gray-400 mb-2">
+                    Extras para {product.name} {selectedInstance + 1} de {qty}
+                  </p>
+                )}
                 <div className="space-y-2">
                   {extras.map((extra) => {
-                    const extraCart = items.find((i) => i.product.id === extra.id)
-                    const extraQty = extraCart?.quantity || 0
+                    const extraQty = currentInstance?.extras.find((e) => e.product.id === extra.id)?.quantity || 0
                     return (
-                      <div
-                        key={extra.id}
-                        className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3"
-                      >
+                      <div key={extra.id} className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3">
                         <div>
                           <p className="font-semibold text-sm text-gray-800">{extra.name}</p>
                           <p className="text-brand-600 text-sm font-bold">+{formatPrice(extra.price)}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          {extraQty > 0 ? (
+                          {extraQty > 0 && (
                             <>
                               <motion.button whileTap={{ scale: 0.85 }}
-                                onClick={() => updateQty(extra.id, extraQty - 1)}
+                                onClick={() => removeExtraFromInstance(product.id, selectedInstance, extra.id)}
                                 className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center"
                               >
                                 <Minus size={12} />
@@ -146,9 +181,12 @@ function ProductModal({
                                 {extraQty}
                               </motion.span>
                             </>
-                          ) : null}
+                          )}
                           <motion.button whileTap={{ scale: 0.85 }}
-                            onClick={() => add(extra)}
+                            onClick={() => {
+                              if (!cartItem) add(product)
+                              addExtraToInstance(product.id, selectedInstance, extra)
+                            }}
                             className="w-7 h-7 bg-brand-500 text-white rounded-full flex items-center justify-center"
                           >
                             <Plus size={12} />
@@ -384,12 +422,11 @@ function MenuContent() {
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className={`max-w-6xl mx-auto px-6 py-8 ${count > 0 ? 'pb-28 sm:pb-8' : ''}`}>
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Nuestro menú</h1>
           <p className="text-gray-500 mt-1">Toca cualquier producto para ver los detalles</p>
         </motion.div>
-
         {/* Search mobile */}
         <div className="relative mb-6 sm:hidden">
           <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -452,10 +489,13 @@ function MenuContent() {
               >
                 <div className="relative h-44 overflow-hidden">
                   <Image src={getImage(product)} alt={product.name} fill className="object-cover transition-transform duration-500" />
-                  <div className="absolute top-3 left-3">
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
                     <span className="bg-white/90 backdrop-blur-sm text-xs font-semibold text-gray-600 px-2.5 py-1 rounded-full">
                       {product.category?.name}
                     </span>
+                    {product.deliveryDate && (
+                      <DeliveryBadge date={product.deliveryDate} />
+                    )}
                   </div>
                 </div>
                 <div className="p-4">

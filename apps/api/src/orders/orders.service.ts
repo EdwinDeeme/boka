@@ -4,7 +4,17 @@ import { CreateOrderDto, OrderStatus } from './dto/order.dto'
 import type { Product } from '@prisma/client'
 
 const ORDER_INCLUDE = {
-  items: { include: { product: true } },
+  items: {
+    where: { parentItemId: null },
+    orderBy: { id: 'asc' as const },
+    include: {
+      product: true,
+      extras: {
+        orderBy: { id: 'asc' as const },
+        include: { product: true },
+      },
+    },
+  },
 }
 
 @Injectable()
@@ -35,21 +45,45 @@ export class OrdersService {
   }
 
   async create(dto: CreateOrderDto) {
-    // Obtener precios actuales de los productos
-    const productIds = dto.items.map((i) => i.productId)
-    const products = await this.prisma.product.findMany({
-      where: { id: { in: productIds }, active: true },
-    })
+    // Collect all product IDs
+    const mainProductIds = [...new Set(dto.items.map((i) => i.productId))]
+    const extraProductIds = [
+      ...new Set(
+        dto.items.flatMap((i) =>
+          i.instances.flatMap((inst) => (inst.extras || []).map((e) => e.productId))
+        )
+      ),
+    ]
 
-    if (products.length !== productIds.length) {
+    // Main products must be active
+    const mainProducts = await this.prisma.product.findMany({
+      where: { id: { in: mainProductIds }, active: true },
+    })
+    if (mainProducts.length !== mainProductIds.length) {
       throw new BadRequestException('Uno o más productos no están disponibles')
     }
 
-    const productMap = new Map<number, Product>(products.map((p) => [p.id, p]))
+    // Extras don't need to be active
+    const extraProducts = extraProductIds.length > 0
+      ? await this.prisma.product.findMany({ where: { id: { in: extraProductIds } } })
+      : []
+
+    const productMap = new Map<number, Product>(
+      [...mainProducts, ...extraProducts].map((p) => [p.id, p])
+    )
+
+    // Total: each instance is quantity=1, extras per instance
     const total = dto.items.reduce((sum, item) => {
-      return sum + productMap.get(item.productId)!.price * item.quantity
+      const basePrice = productMap.get(item.productId)!.price
+      return sum + item.instances.reduce((instSum, inst) => {
+        const extrasTotal = (inst.extras || []).reduce(
+          (s, e) => s + productMap.get(e.productId)!.price * e.quantity, 0
+        )
+        return instSum + basePrice + extrasTotal
+      }, 0)
     }, 0)
 
+    // Step 1: create order — one row per instance (quantity=1 each)
     const order = await this.prisma.order.create({
       data: {
         customerName: dto.customerName,
@@ -59,20 +93,53 @@ export class OrdersService {
         paymentMethod: dto.paymentMethod,
         total,
         items: {
-          create: dto.items.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            price: productMap.get(item.productId)!.price,
-          })),
+          create: dto.items.flatMap((item) =>
+            item.instances.map(() => ({
+              productId: item.productId,
+              quantity: 1,
+              price: productMap.get(item.productId)!.price,
+            }))
+          ),
         },
       },
-      include: ORDER_INCLUDE,
+      include: { items: { where: { parentItemId: null }, orderBy: { id: 'asc' } } },
     })
 
-    // Reducir inventario
-    await this.reduceInventory(dto.items)
+    // Step 2: create extras per instance — items are in insertion order
+    let itemIdx = 0
+    const extrasToCreate: Array<{
+      orderId: number
+      parentItemId: number
+      productId: number
+      quantity: number
+      price: number
+    }> = []
 
-    return order
+    for (const dtoItem of dto.items) {
+      for (const inst of dtoItem.instances) {
+        const parentItem = order.items[itemIdx++]
+        for (const e of inst.extras || []) {
+          extrasToCreate.push({
+            orderId: order.id,
+            parentItemId: parentItem.id,
+            productId: e.productId,
+            quantity: e.quantity,
+            price: productMap.get(e.productId)!.price,
+          })
+        }
+      }
+    }
+
+    if (extrasToCreate.length > 0) {
+      await this.prisma.orderItem.createMany({ data: extrasToCreate })
+    }
+
+    return this.findOne(order.id)
+  }
+
+  async getCount() {
+    const count = await this.prisma.order.count()
+    return { count }
   }
 
   async updateStatus(id: number, status: OrderStatus) {
@@ -82,19 +149,5 @@ export class OrdersService {
       data: { status },
       include: ORDER_INCLUDE,
     })
-  }
-
-  private async reduceInventory(items: { productId: number; quantity: number }[]) {
-    for (const item of items) {
-      const productInventory = await this.prisma.productInventory.findMany({
-        where: { productId: item.productId },
-      })
-      for (const pi of productInventory) {
-        await this.prisma.inventoryItem.update({
-          where: { id: pi.inventoryItemId },
-          data: { stock: { decrement: pi.quantityUsed * item.quantity } },
-        })
-      }
-    }
   }
 }

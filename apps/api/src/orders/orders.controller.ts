@@ -16,6 +16,11 @@ export class OrdersController {
     return this.service.findAll(status)
   }
 
+  @Get('count')
+  getCount() {
+    return this.service.getCount()
+  }
+
   @Get('by-phone/:phone')
   findByPhone(@Param('phone') phone: string) {
     return this.service.findByPhone(phone)

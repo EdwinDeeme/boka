@@ -12,6 +12,11 @@ export class OrdersGateway {
 
   emitOrderUpdated(order: unknown) {
     this.server.emit('order_updated', order)
+    // Notificar al cliente cuando su pedido está listo
+    const o = order as { id: number; status: string; phone: string }
+    if (o.status === 'LISTO') {
+      this.server.emit('order_ready', { orderId: o.id, phone: o.phone })
+    }
   }
 
   @SubscribeMessage('join_dashboard')

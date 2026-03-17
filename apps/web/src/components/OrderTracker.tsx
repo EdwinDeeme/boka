@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Phone, Search, Package, Clock, CheckCircle, Truck, Store, RefreshCw, RotateCcw, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, Phone, Search, Package, Clock, CheckCircle, Truck, Store, RefreshCw, RotateCcw, ChevronLeft, ChevronRight, Bell } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
 import { useCart } from '@/context/CartContext'
 import type { Order, OrderStatus } from '@/types'
@@ -48,7 +48,7 @@ function OrderCard({ order, onRepeat }: { order: Order; onRepeat: (o: Order) => 
         </div>
         <div className="flex items-center gap-1 text-xs text-gray-400">
           {isEnvio ? <Truck size={11} /> : <Store size={11} />}
-          {isEnvio ? 'Envío' : 'Pickup'}
+          {isEnvio ? 'Express' : 'Para recoger'}
         </div>
       </div>
 
@@ -89,9 +89,21 @@ function OrderCard({ order, onRepeat }: { order: Order; onRepeat: (o: Order) => 
       {/* Items */}
       <div className="px-4 py-3 space-y-1 border-t border-gray-100">
         {order.items.map((item) => (
-          <div key={item.id} className="flex justify-between text-sm">
-            <span className="text-gray-700">{item.product.name} <span className="text-gray-400">× {item.quantity}</span></span>
-            <span className="font-medium text-gray-900">{formatPrice(item.price * item.quantity)}</span>
+          <div key={item.id}>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-700">{item.product.name} <span className="text-gray-400">× {item.quantity}</span></span>
+              <span className="font-medium text-gray-900">{formatPrice(item.price * item.quantity)}</span>
+            </div>
+            {(item.extras || []).length > 0 && (
+              <div className="ml-3 mt-0.5 space-y-0.5">
+                {item.extras.map((e) => (
+                  <div key={e.id} className="flex justify-between text-xs text-gray-400">
+                    <span>+ {e.product.name} × {e.quantity}</span>
+                    <span>{formatPrice(e.price * e.quantity)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
         <div className="flex justify-between pt-2 border-t border-gray-100 mt-1">
@@ -122,7 +134,11 @@ export function OrderTracker({ open, onClose, defaultPhone }: Props) {
   const [searched, setSearched] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [current, setCurrent] = useState(0)
+  const [readyOrderId, setReadyOrderId] = useState<number | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const phoneRef = useRef(phone)
+
+  useEffect(() => { phoneRef.current = phone }, [phone])
 
   const fetchOrders = useCallback(async (q: string, silent = false) => {
     if (!q.trim()) return
@@ -149,6 +165,36 @@ export function OrderTracker({ open, onClose, defaultPhone }: Props) {
     const id = setInterval(() => fetchOrders(phone, true), 30_000)
     return () => clearInterval(id)
   }, [open, searched, phone, fetchOrders])
+
+  // Escuchar evento order_ready del servidor
+  useEffect(() => {
+    if (!open) return
+    let socket: import('socket.io-client').Socket
+    import('socket.io-client').then(({ io }) => {
+      socket = io(`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}/orders`)
+      socket.on('order_ready', ({ orderId, phone: orderPhone }: { orderId: number; phone: string }) => {
+        // Solo notificar si el teléfono coincide con el que está buscando este cliente
+        const currentPhone = phoneRef.current.trim().replace(/[-\s]/g, '')
+        const incomingPhone = orderPhone.trim().replace(/[-\s]/g, '')
+        if (currentPhone && currentPhone === incomingPhone) {
+          setReadyOrderId(orderId)
+          fetchOrders(phoneRef.current, true)
+          // Notificación del navegador si tiene permiso
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification('🎉 ¡Tu pedido está listo!', {
+              body: `Pedido #${orderId} listo para recoger.`,
+              icon: '/boka-logo.png',
+              tag: `ready-${orderId}`,
+            })
+          }
+        }
+      })
+      socket.on('order_updated', (updated: Order) => {
+        setOrders((prev) => prev.map((o) => o.id === updated.id ? updated : o))
+      })
+    })
+    return () => { socket?.disconnect() }
+  }, [open, fetchOrders])
 
   function handleSearch() { setSearched(true); fetchOrders(phone) }
 
@@ -224,6 +270,28 @@ export function OrderTracker({ open, onClose, defaultPhone }: Props) {
                 </p>
               )}
             </div>
+
+            {/* Banner pedido listo */}
+            <AnimatePresence>
+              {readyOrderId && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                  className="mx-5 mb-2 bg-green-50 border-2 border-green-300 rounded-2xl px-4 py-3 flex items-center gap-3"
+                >
+                  <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+                    <Bell size={18} className="text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-green-800">🎉 ¡Tu pedido #{readyOrderId} está listo!</p>
+                    <p className="text-xs text-green-600">Pasa a recogerlo cuando quieras.</p>
+                  </div>
+                  <button onClick={() => setReadyOrderId(null)}
+                    className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-green-100 transition-colors shrink-0">
+                    <X size={13} className="text-green-600" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Carousel / Results */}
             <div className="flex-1 overflow-hidden flex flex-col min-h-0">

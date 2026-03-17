@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Pencil, Trash2, Check, X, Tag } from 'lucide-react'
 import { api } from '@/lib/api'
+import { ConfirmModal } from '@/components/ConfirmModal'
 import type { Category } from '@/types'
 
 export default function CategoriesAdminPage() {
@@ -9,6 +10,7 @@ export default function CategoriesAdminPage() {
   const [newName, setNewName] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
+  const [deleteId, setDeleteId] = useState<number | null>(null)
 
   async function load() {
     setCategories(await api.get<Category[]>('/categories'))
@@ -29,31 +31,32 @@ export default function CategoriesAdminPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!confirm('¿Eliminar esta categoría?')) return
-    await api.delete(`/categories/${id}`); load()
+    await api.delete(`/categories/${id}`)
+    setDeleteId(null)
+    load()
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Categorías</h1>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-full overflow-x-hidden">
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Categorías</h1>
         <p className="text-gray-500 text-sm mt-0.5">{categories.length} categorías</p>
       </div>
 
       <div className="max-w-lg space-y-4">
         {/* Agregar */}
-        <form onSubmit={handleCreate} className="flex gap-3">
+        <form onSubmit={handleCreate} className="flex gap-2">
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder="Nueva categoría..."
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
+            className="flex-1 min-w-0 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
           />
           <button
             type="submit"
-            className="flex items-center gap-2 bg-gray-900 hover:bg-gray-800 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors"
+            className="flex items-center gap-1.5 bg-gray-900 hover:bg-gray-800 text-white px-4 py-2.5 rounded-xl font-semibold text-sm transition-colors shrink-0"
           >
-            <Plus size={16} /> Agregar
+            <Plus size={16} /> <span className="hidden sm:inline">Agregar</span>
           </button>
         </form>
 
@@ -90,7 +93,7 @@ export default function CategoriesAdminPage() {
                     <Pencil size={15} />
                   </button>
                   <button
-                    onClick={() => handleDelete(cat.id)}
+                    onClick={() => setDeleteId(cat.id)}
                     className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
                   >
                     <Trash2 size={15} />
@@ -104,6 +107,15 @@ export default function CategoriesAdminPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={deleteId !== null}
+        title="Eliminar categoría"
+        message="Esta acción no se puede deshacer. ¿Seguro que quieres eliminar esta categoría?"
+        confirmLabel="Eliminar"
+        onConfirm={() => deleteId !== null && handleDelete(deleteId)}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   )
 }
