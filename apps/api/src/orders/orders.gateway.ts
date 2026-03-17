@@ -1,8 +1,4 @@
-import {
-  WebSocketGateway,
-  WebSocketServer,
-  SubscribeMessage,
-} from '@nestjs/websockets'
+import { WebSocketGateway, WebSocketServer, SubscribeMessage } from '@nestjs/websockets'
 import { Server } from 'socket.io'
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: 'orders' })
@@ -10,11 +6,11 @@ export class OrdersGateway {
   @WebSocketServer()
   server: Server
 
-  emitNewOrder(order: any) {
+  emitNewOrder(order: unknown) {
     this.server.emit('new_order', order)
   }
 
-  emitOrderUpdated(order: any) {
+  emitOrderUpdated(order: unknown) {
     this.server.emit('order_updated', order)
   }
 
