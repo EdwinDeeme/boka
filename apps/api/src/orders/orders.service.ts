@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { CreateOrderDto } from './dto/order.dto'
-import { OrderStatus } from '@prisma/client'
+import { CreateOrderDto, OrderStatus } from './dto/order.dto'
+import type { Product } from '@prisma/client'
 
 const ORDER_INCLUDE = {
   items: { include: { product: true } },
@@ -45,7 +45,7 @@ export class OrdersService {
       throw new BadRequestException('Uno o más productos no están disponibles')
     }
 
-    const productMap = new Map(products.map((p) => [p.id, p]))
+    const productMap = new Map<number, Product>(products.map((p) => [p.id, p]))
     const total = dto.items.reduce((sum, item) => {
       return sum + productMap.get(item.productId)!.price * item.quantity
     }, 0)

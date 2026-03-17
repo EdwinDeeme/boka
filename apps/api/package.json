@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "nest start --watch",
-    "build": "nest build",
+    "build": "prisma generate && nest build",
+    "postinstall": "prisma generate",
     "start": "node dist/main",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"

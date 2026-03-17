@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Body, Param, Query, ParseIntPipe } from '@n
 import { OrdersService } from './orders.service'
 import { OrdersGateway } from './orders.gateway'
 import { CreateOrderDto } from './dto/order.dto'
-import { OrderStatus } from '@prisma/client'
+import { OrderStatus } from './dto/order.dto'
 
 @Controller('orders')
 export class OrdersController {

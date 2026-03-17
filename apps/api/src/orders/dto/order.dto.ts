@@ -1,6 +1,12 @@
 import { IsString, IsEnum, IsArray, ValidateNested, IsInt, Min } from 'class-validator'
 import { Type } from 'class-transformer'
-import { DeliveryType, PaymentMethod } from '@prisma/client'
+
+export enum DeliveryType { PICKUP = 'PICKUP', ENVIO = 'ENVIO' }
+export enum PaymentMethod { EFECTIVO = 'EFECTIVO', SINPE = 'SINPE' }
+export enum OrderStatus {
+  NUEVO = 'NUEVO', ACEPTADO = 'ACEPTADO', PREPARANDO = 'PREPARANDO',
+  LISTO = 'LISTO', ENVIANDO = 'ENVIANDO', ENTREGADO = 'ENTREGADO', CANCELADO = 'CANCELADO',
+}
 
 export class OrderItemDto {
   @IsInt()
