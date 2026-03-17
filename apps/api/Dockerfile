@@ -6,7 +6,7 @@ WORKDIR /app/apps/api
 
 COPY apps/api/package.json ./
 
-RUN npm install
+RUN npm install --ignore-scripts
 
 COPY apps/api ./
 
