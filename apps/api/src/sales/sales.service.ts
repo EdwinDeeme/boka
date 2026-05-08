@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service'
 export class SalesService {
   constructor(private prisma: PrismaService) {}
 
-  async getToday() {
+  async getToday(branchId?: number) {
     const start = new Date()
     start.setHours(0, 0, 0, 0)
     const end = new Date()
@@ -15,6 +15,7 @@ export class SalesService {
       where: {
         createdAt: { gte: start, lte: end },
         status: { not: 'CANCELADO' },
+        ...(branchId ? { branchId } : {}),
       },
       include: { items: { include: { product: true } } },
     })

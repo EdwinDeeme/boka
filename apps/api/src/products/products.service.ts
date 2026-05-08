@@ -6,9 +6,12 @@ import { CreateProductDto, UpdateProductDto } from './dto/product.dto'
 export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(onlyActive = false) {
+  findAll(onlyActive = false, branchId?: number) {
     return this.prisma.product.findMany({
-      where: onlyActive ? { active: true } : undefined,
+      where: {
+        ...(onlyActive ? { active: true } : {}),
+        ...(branchId ? { branchId } : {}),
+      },
       include: {
         category: true,
         extras: { include: { extra: { include: { category: true } } } },
@@ -68,9 +71,9 @@ export class ProductsService {
   }
 
   // Cuántas unidades se pueden hacer de cada producto activo según stock actual
-  async getCapacities() {
+  async getCapacities(branchId?: number) {
     const products = await this.prisma.product.findMany({
-      where: { active: true },
+      where: { active: true, ...(branchId ? { branchId } : {}) },
       include: { inventory: { include: { inventoryItem: true } } },
     })
     return products.map((p) => {

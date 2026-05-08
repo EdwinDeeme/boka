@@ -4,8 +4,9 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ShoppingCart, Plus, Search, X, Minus, Sparkles, ClipboardList, CalendarDays } from 'lucide-react'
+import { ShoppingCart, Plus, Search, X, Minus, Sparkles, ClipboardList, CalendarDays, MapPin } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
+import { useBranch } from '@/context/BranchContext'
 import { formatPrice, cn } from '@/lib/utils'
 import { CartDrawer } from '@/components/CartDrawer'
 import { OrderTracker } from '@/components/OrderTracker'
@@ -308,6 +309,7 @@ export default function MenuPage() {
 
 function MenuContent() {
   const { add, count, total } = useCart()
+  const { selectedBranch, branches, selectBranch } = useBranch()
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
@@ -329,13 +331,15 @@ function MenuContent() {
   }, [])
 
   useEffect(() => {
+    if (!selectedBranch) return
+    setLoading(true)
     Promise.all([
-      fetch(`${API}/products?active=true`).then((r) => r.json()),
+      fetch(`${API}/products?active=true&branchId=${selectedBranch.id}`).then((r) => r.json()),
       fetch(`${API}/categories`).then((r) => r.json()),
     ])
       .then(([prods, cats]) => { setProducts(prods); setCategories(cats) })
       .finally(() => setLoading(false))
-  }, [])
+  }, [selectedBranch])
 
   // Excluir "Extras" del menú principal — se muestran dentro de cada producto
   const menuCategories = categories.filter((c) => c.name !== 'Extras')
@@ -425,7 +429,22 @@ function MenuContent() {
       <div className={`max-w-6xl mx-auto px-6 py-8 ${count > 0 ? 'pb-28 sm:pb-8' : ''}`}>
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Nuestro menú</h1>
-          <p className="text-gray-500 mt-1">Toca cualquier producto para ver los detalles</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-gray-500">Toca cualquier producto para ver los detalles</p>
+            {selectedBranch && branches.length > 1 && (
+              <button
+                onClick={() => {
+                  // Allow changing branch
+                  const other = branches.filter((b) => b.id !== selectedBranch.id)
+                  if (other.length === 1) selectBranch(other[0])
+                }}
+                className="flex items-center gap-1 text-xs text-orange-600 font-semibold bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full hover:bg-orange-100 transition-colors"
+              >
+                <MapPin size={11} />
+                {selectedBranch.name}
+              </button>
+            )}
+          </div>
         </motion.div>
         {/* Search mobile */}
         <div className="relative mb-6 sm:hidden">

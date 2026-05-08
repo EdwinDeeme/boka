@@ -1,3 +1,11 @@
+export type Branch = {
+  id: number
+  name: string
+  address?: string | null
+  phone?: string | null
+  active: boolean
+}
+
 export type Category = {
   id: number
   name: string
@@ -41,10 +49,11 @@ export type Order = {
   customerName: string
   phone: string
   address?: string
-  deliveryType: 'PICKUP' | 'ENVIO'
+  deliveryType: 'PICKUP' | 'ENVIO' | 'MESA'
   paymentMethod: 'EFECTIVO' | 'SINPE'
   status: OrderStatus
   total: number
+  tableNumber?: string | null
   createdAt: string
   updatedAt: string
   items: {

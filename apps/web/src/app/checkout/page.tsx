@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, CheckCircle, Store, Truck, Banknote, Smartphone, ChevronRight, Copy, Check, MapPin } from 'lucide-react'
 import { useCart } from '@/context/CartContext'
+import { useBranch } from '@/context/BranchContext'
 import { api } from '@/lib/api'
 import { formatPrice, cn } from '@/lib/utils'
 import { DISTRITOS } from '@/lib/perezZeledon'
@@ -26,7 +27,7 @@ type FormData = {
   distrito: string
   barrio: string
   address: string
-  deliveryType: 'PICKUP' | 'ENVIO'
+  deliveryType: 'PICKUP' | 'ENVIO' | 'MESA'
   paymentMethod: 'EFECTIVO' | 'SINPE'
   sinpeVoucher: string
   sinpeName: string
@@ -78,6 +79,7 @@ const sectionVariants = {
 
 export default function CheckoutPage() {
   const { items, total, clear } = useCart()
+  const { selectedBranch, serviceType, tableNumber } = useBranch()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [orderId, setOrderId] = useState<number | null>(null)
@@ -86,7 +88,8 @@ export default function CheckoutPage() {
   const [form, setForm] = useState<FormData>({
     customerName: '', phone: '',
     distrito: '', barrio: '', address: '',
-    deliveryType: 'PICKUP', paymentMethod: 'EFECTIVO',
+    deliveryType: (serviceType as 'PICKUP' | 'ENVIO' | 'MESA') ?? 'PICKUP',
+    paymentMethod: 'EFECTIVO',
     sinpeVoucher: '', sinpeName: '', sinpePhone: '',
     billAmount: '',
   })
@@ -125,6 +128,8 @@ export default function CheckoutPage() {
         address: fullAddress,
         deliveryType: form.deliveryType,
         paymentMethod: form.paymentMethod,
+        ...(selectedBranch ? { branchId: selectedBranch.id } : {}),
+        ...(form.deliveryType === 'MESA' && tableNumber ? { tableNumber } : {}),
         items: items.map((i) => ({
           productId: i.product.id,
           instances: i.instances.map((inst) => ({
@@ -236,32 +241,46 @@ export default function CheckoutPage() {
           className="bg-white rounded-2xl border border-gray-100 shadow-card p-5"
         >
           <h2 className="font-semibold text-gray-900 mb-4">Tipo de entrega</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {([
-              { value: 'PICKUP', label: 'Para recoger', sub: 'Recoger en local', icon: Store },
-              { value: 'ENVIO',  label: 'Express',      sub: 'A domicilio',      icon: Truck },
-            ] as const).map(({ value, label, sub, icon: Icon }) => (
-              <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
-                onClick={() => set('deliveryType', value)}
-                className={cn(
-                  'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
-                  form.deliveryType === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
-                )}
-              >
-                <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
-                  form.deliveryType === value ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500')}>
-                  <Icon size={18} />
-                </div>
-                <div>
-                  <p className={cn('font-semibold text-sm', form.deliveryType === value ? 'text-brand-700' : 'text-gray-800')}>{label}</p>
-                  <p className="text-xs text-gray-400">{sub}</p>
-                </div>
-              </motion.button>
-            ))}
-          </div>
 
-          <AnimatePresence>
-            {form.deliveryType === 'ENVIO' && (
+          {/* If MESA was selected in the modal, just show it locked */}
+          {form.deliveryType === 'MESA' ? (
+            <div className="flex items-center gap-3 bg-orange-50 border-2 border-orange-400 rounded-xl p-4">
+              <div className="bg-orange-500 rounded-lg p-2">
+                <Store size={18} className="text-white" />
+              </div>
+              <div>
+                <p className="font-semibold text-orange-700">Comer en el local</p>
+                <p className="text-sm text-orange-600">Mesa {tableNumber}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  { value: 'PICKUP', label: 'Para recoger', sub: 'Recoger en local', icon: Store },
+                  { value: 'ENVIO',  label: 'Express',      sub: 'A domicilio',      icon: Truck },
+                ] as const).map(({ value, label, sub, icon: Icon }) => (
+                  <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
+                    onClick={() => set('deliveryType', value)}
+                    className={cn(
+                      'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
+                      form.deliveryType === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
+                    )}
+                  >
+                    <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
+                      form.deliveryType === value ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500')}>
+                      <Icon size={18} />
+                    </div>
+                    <div>
+                      <p className={cn('font-semibold text-sm', form.deliveryType === value ? 'text-brand-700' : 'text-gray-800')}>{label}</p>
+                      <p className="text-xs text-gray-400">{sub}</p>
+                    </div>
+                  </motion.button>
+                ))}
+              </div>
+
+              <AnimatePresence>
+                {form.deliveryType === 'ENVIO' && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }}
@@ -339,6 +358,8 @@ export default function CheckoutPage() {
               </motion.div>
             )}
           </AnimatePresence>
+            </>
+          )}
         </motion.div>
 
         {/* Método de pago */}
@@ -346,29 +367,57 @@ export default function CheckoutPage() {
           className="bg-white rounded-2xl border border-gray-100 shadow-card p-5"
         >
           <h2 className="font-semibold text-gray-900 mb-4">Método de pago</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {([
-              { value: 'EFECTIVO', label: 'Efectivo',    sub: 'Al recibir',    icon: Banknote },
-              { value: 'SINPE',    label: 'SINPE Móvil', sub: 'Transferencia', icon: Smartphone },
-            ] as const).map(({ value, label, sub, icon: Icon }) => (
-              <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
-                onClick={() => set('paymentMethod', value)}
-                className={cn(
-                  'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
-                  form.paymentMethod === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
-                )}
-              >
-                <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
-                  form.paymentMethod === value ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500')}>
-                  <Icon size={18} />
-                </div>
-                <div>
-                  <p className={cn('font-semibold text-sm', form.paymentMethod === value ? 'text-brand-700' : 'text-gray-800')}>{label}</p>
-                  <p className="text-xs text-gray-400">{sub}</p>
-                </div>
-              </motion.button>
-            ))}
-          </div>
+
+          {/* MESA: solo SINPE o pagar en mostrador */}
+          {form.deliveryType === 'MESA' ? (
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { value: 'SINPE',     label: 'SINPE Móvil',     sub: 'Transferencia',       icon: Smartphone },
+                { value: 'EFECTIVO',  label: 'En el mostrador', sub: 'Pagás al retirar',    icon: Banknote },
+              ] as const).map(({ value, label, sub, icon: Icon }) => (
+                <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
+                  onClick={() => set('paymentMethod', value)}
+                  className={cn(
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
+                    form.paymentMethod === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
+                    form.paymentMethod === value ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500')}>
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <p className={cn('font-semibold text-sm', form.paymentMethod === value ? 'text-brand-700' : 'text-gray-800')}>{label}</p>
+                    <p className="text-xs text-gray-400">{sub}</p>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {([
+                { value: 'EFECTIVO', label: 'Efectivo',    sub: 'Al recibir',    icon: Banknote },
+                { value: 'SINPE',    label: 'SINPE Móvil', sub: 'Transferencia', icon: Smartphone },
+              ] as const).map(({ value, label, sub, icon: Icon }) => (
+                <motion.button key={value} type="button" whileTap={{ scale: 0.97 }}
+                  onClick={() => set('paymentMethod', value)}
+                  className={cn(
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 text-center transition-all',
+                    form.paymentMethod === value ? 'border-brand-500 bg-brand-50' : 'border-gray-200 hover:border-gray-300'
+                  )}
+                >
+                  <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
+                    form.paymentMethod === value ? 'bg-brand-500 text-white' : 'bg-gray-100 text-gray-500')}>
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <p className={cn('font-semibold text-sm', form.paymentMethod === value ? 'text-brand-700' : 'text-gray-800')}>{label}</p>
+                    <p className="text-xs text-gray-400">{sub}</p>
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          )}
 
           {/* SINPE */}
           <AnimatePresence>

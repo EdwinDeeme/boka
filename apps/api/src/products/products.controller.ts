@@ -7,13 +7,13 @@ export class ProductsController {
   constructor(private readonly service: ProductsService) {}
 
   @Get()
-  findAll(@Query('active') active?: string) {
-    return this.service.findAll(active === 'true')
+  findAll(@Query('active') active?: string, @Query('branchId') branchId?: string) {
+    return this.service.findAll(active === 'true', branchId ? parseInt(branchId) : undefined)
   }
 
   @Get('capacities/all')
-  getCapacities() {
-    return this.service.getCapacities()
+  getCapacities(@Query('branchId') branchId?: string) {
+    return this.service.getCapacities(branchId ? parseInt(branchId) : undefined)
   }
 
   @Get(':id')

@@ -611,12 +611,16 @@ function AdminOrdersContent() {
                 <div className="px-4 pt-3 pb-2 flex gap-2 flex-wrap">
                   <span className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold border',
-                    isEnvio
+                    order.deliveryType === 'ENVIO'
                       ? 'bg-blue-50 text-blue-700 border-blue-200'
-                      : 'bg-gray-100 text-gray-600 border-gray-200'
+                      : order.deliveryType === 'MESA'
+                        ? 'bg-orange-50 text-orange-700 border-orange-200'
+                        : 'bg-gray-100 text-gray-600 border-gray-200'
                   )}>
-                    {isEnvio ? <Truck size={14} /> : <Store size={14} />}
-                    {isEnvio ? 'Express' : 'Para recoger'}
+                    {order.deliveryType === 'ENVIO' && <Truck size={14} />}
+                    {order.deliveryType === 'PICKUP' && <Store size={14} />}
+                    {order.deliveryType === 'MESA' && <ClipboardList size={14} />}
+                    {order.deliveryType === 'ENVIO' ? 'Express' : order.deliveryType === 'MESA' ? `Mesa ${order.tableNumber ?? ''}` : 'Para recoger'}
                   </span>
                   <span className={cn(
                     'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-bold border',
@@ -738,13 +742,13 @@ function AdminOrdersContent() {
                     </button>
                   )}
 
-                  {/* LISTO + PICKUP → Entregado directo */}
+                  {/* LISTO + PICKUP o MESA → Entregado directo */}
                   {order.status === 'LISTO' && !isEnvio && (
                     <button
                       onClick={() => updateStatus(order.id, 'ENTREGADO')}
                       className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-base font-bold text-white bg-green-600 hover:bg-green-700 transition-colors"
                     >
-                      Marcar entregado
+                      {order.deliveryType === 'MESA' ? 'Llevar a la mesa' : 'Marcar entregado'}
                       <ChevronRight size={18} />
                     </button>
                   )}

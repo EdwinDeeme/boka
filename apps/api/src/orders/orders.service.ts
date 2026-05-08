@@ -21,9 +21,12 @@ const ORDER_INCLUDE = {
 export class OrdersService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(status?: OrderStatus) {
+  findAll(status?: OrderStatus, branchId?: number) {
     return this.prisma.order.findMany({
-      where: status ? { status } : undefined,
+      where: {
+        ...(status ? { status } : {}),
+        ...(branchId ? { branchId } : {}),
+      },
       include: ORDER_INCLUDE,
       orderBy: { createdAt: 'desc' },
     })
@@ -92,6 +95,8 @@ export class OrdersService {
         deliveryType: dto.deliveryType,
         paymentMethod: dto.paymentMethod,
         total,
+        ...(dto.branchId ? { branchId: dto.branchId } : {}),
+        ...(dto.tableNumber ? { tableNumber: dto.tableNumber } : {}),
         items: {
           create: dto.items.flatMap((item) =>
             item.instances.map(() => ({
@@ -137,8 +142,10 @@ export class OrdersService {
     return this.findOne(order.id)
   }
 
-  async getCount() {
-    const count = await this.prisma.order.count()
+  async getCount(branchId?: number) {
+    const count = await this.prisma.order.count({
+      where: branchId ? { branchId } : undefined,
+    })
     return { count }
   }
 

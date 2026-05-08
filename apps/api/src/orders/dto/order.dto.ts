@@ -1,7 +1,7 @@
 import { IsString, IsEnum, IsArray, ValidateNested, IsInt, Min, IsOptional } from 'class-validator'
 import { Type } from 'class-transformer'
 
-export enum DeliveryType { PICKUP = 'PICKUP', ENVIO = 'ENVIO' }
+export enum DeliveryType { PICKUP = 'PICKUP', ENVIO = 'ENVIO', MESA = 'MESA' }
 export enum PaymentMethod { EFECTIVO = 'EFECTIVO', SINPE = 'SINPE' }
 export enum OrderStatus {
   NUEVO = 'NUEVO', ACEPTADO = 'ACEPTADO', PREPARANDO = 'PREPARANDO',
@@ -52,6 +52,14 @@ export class CreateOrderDto {
 
   @IsEnum(PaymentMethod)
   paymentMethod: PaymentMethod
+
+  @IsOptional()
+  @IsInt()
+  branchId?: number
+
+  @IsOptional()
+  @IsString()
+  tableNumber?: string
 
   @IsArray()
   @ValidateNested({ each: true })

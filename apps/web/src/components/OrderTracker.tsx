@@ -47,8 +47,9 @@ function OrderCard({ order, onRepeat }: { order: Order; onRepeat: (o: Order) => 
           </span>
         </div>
         <div className="flex items-center gap-1 text-xs text-gray-400">
-          {isEnvio ? <Truck size={11} /> : <Store size={11} />}
-          {isEnvio ? 'Express' : 'Para recoger'}
+          {order.deliveryType === 'ENVIO' && <><Truck size={11} /> Express</>}
+          {order.deliveryType === 'PICKUP' && <><Store size={11} /> Para recoger</>}
+          {order.deliveryType === 'MESA' && <><Store size={11} /> Mesa {order.tableNumber ?? ''}</>}
         </div>
       </div>
 
@@ -56,7 +57,9 @@ function OrderCard({ order, onRepeat }: { order: Order; onRepeat: (o: Order) => 
       {ESTIMATED[order.status] && (
         <div className="px-4 pt-3 pb-1">
           <p className={cn('text-sm font-semibold', isActive ? 'text-brand-600' : 'text-gray-500')}>
-            {ESTIMATED[order.status]}
+            {order.status === 'LISTO' && order.deliveryType === 'MESA'
+              ? '¡Tu pedido está listo! Lo llevamos a tu mesa 🍽️'
+              : ESTIMATED[order.status]}
           </p>
         </div>
       )}

@@ -5,8 +5,9 @@ import { PrismaService } from '../prisma/prisma.service'
 export class InventoryService {
   constructor(private prisma: PrismaService) {}
 
-  findAll() {
+  findAll(branchId?: number) {
     return this.prisma.inventoryItem.findMany({
+      where: branchId ? { branchId } : undefined,
       include: { products: { include: { product: true } } },
     })
   }
@@ -20,7 +21,7 @@ export class InventoryService {
     })
   }
 
-  create(data: { name: string; stock: number; unit: string }) {
+  create(data: { name: string; stock: number; unit: string; branchId?: number }) {
     return this.prisma.inventoryItem.create({ data })
   }
 }

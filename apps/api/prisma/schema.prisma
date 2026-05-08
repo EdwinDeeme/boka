@@ -7,6 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Branch {
+  id        Int       @id @default(autoincrement())
+  name      String
+  address   String?
+  phone     String?
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  orders    Order[]
+  products  Product[]
+  inventory InventoryItem[]
+
+  @@map("branches")
+}
+
 model Category {
   id       Int       @id @default(autoincrement())
   name     String    @unique
@@ -25,6 +39,8 @@ model Product {
   imageUrl     String?
   active       Boolean          @default(true)
   deliveryDate DateTime?
+  branchId     Int?
+  branch       Branch?          @relation(fields: [branchId], references: [id])
   orderItems   OrderItem[]
   inventory    ProductInventory[]
   extras       ProductExtra[]   @relation("ProductExtras")
@@ -53,6 +69,9 @@ model Order {
   paymentMethod PaymentMethod
   status        OrderStatus   @default(NUEVO)
   total         Int
+  tableNumber   String?
+  branchId      Int?
+  branch        Branch?       @relation(fields: [branchId], references: [id])
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   items         OrderItem[]
@@ -80,6 +99,8 @@ model InventoryItem {
   name     String
   stock    Float
   unit     String
+  branchId Int?
+  branch   Branch?          @relation(fields: [branchId], references: [id])
   products ProductInventory[]
 
   @@map("inventory_items")
@@ -99,6 +120,7 @@ model ProductInventory {
 enum DeliveryType {
   PICKUP
   ENVIO
+  MESA
 }
 
 enum PaymentMethod {

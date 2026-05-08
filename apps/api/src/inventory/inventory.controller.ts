@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Param, Body, ParseIntPipe } from '@nestjs/common'
+import { Controller, Get, Post, Put, Param, Body, Query, ParseIntPipe } from '@nestjs/common'
 import { InventoryService } from './inventory.service'
 
 @Controller('inventory')
@@ -6,12 +6,12 @@ export class InventoryController {
   constructor(private readonly service: InventoryService) {}
 
   @Get()
-  findAll() {
-    return this.service.findAll()
+  findAll(@Query('branchId') branchId?: string) {
+    return this.service.findAll(branchId ? parseInt(branchId) : undefined)
   }
 
   @Post()
-  create(@Body() body: { name: string; stock: number; unit: string }) {
+  create(@Body() body: { name: string; stock: number; unit: string; branchId?: number }) {
     return this.service.create(body)
   }
 

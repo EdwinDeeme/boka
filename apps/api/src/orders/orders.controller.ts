@@ -12,13 +12,13 @@ export class OrdersController {
   ) {}
 
   @Get()
-  findAll(@Query('status') status?: OrderStatus) {
-    return this.service.findAll(status)
+  findAll(@Query('status') status?: OrderStatus, @Query('branchId') branchId?: string) {
+    return this.service.findAll(status, branchId ? parseInt(branchId) : undefined)
   }
 
   @Get('count')
-  getCount() {
-    return this.service.getCount()
+  getCount(@Query('branchId') branchId?: string) {
+    return this.service.getCount(branchId ? parseInt(branchId) : undefined)
   }
 
   @Get('by-phone/:phone')
