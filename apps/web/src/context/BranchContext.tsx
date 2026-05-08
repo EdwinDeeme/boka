@@ -28,10 +28,11 @@ export function BranchProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch(API_URL + '/branches/public')
       .then((r) => r.json())
-      .then((data: Branch[]) => {
-        setBranches(data)
-        if (data.length === 1 && data[0].active) {
-          setSelectedBranch(data[0])
+      .then((data: unknown) => {
+        const list = Array.isArray(data) ? (data as Branch[]) : []
+        setBranches(list)
+        if (list.length === 1 && list[0].active) {
+          setSelectedBranch(list[0])
         }
       })
       .catch(() => {})
